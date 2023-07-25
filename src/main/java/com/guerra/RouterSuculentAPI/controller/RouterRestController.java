@@ -6,6 +6,7 @@ import com.guerra.RouterSuculentAPI.dto.ResponseDataDto;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -18,6 +19,8 @@ import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 @CrossOrigin
@@ -45,7 +48,7 @@ public class RouterRestController {
 
         log.info("consultando sintomas");
 
-        try{
+        try {
 
             ResponseEntity<ResponseDataDto> responseEntity = restTemplate.getForEntity(urlApi + "/sintomas", ResponseDataDto.class);
             respuestaConsultaSintomas = responseEntity.getBody();
@@ -78,9 +81,28 @@ public class RouterRestController {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("idSintoma", etiqueta.getIdSintoma());
         body.add("consejo", etiqueta.getConsejo());
-        fotos.forEach(foto -> {
-            body.add("fotos", foto.getResource());
-        });
+
+        try {
+            for (MultipartFile foto : fotos) {
+
+                body.add("fotos", new ByteArrayResource(foto.getBytes()) {
+                    @Override
+                    public String getFilename() {
+                        return "image.jpeg";
+                    }
+                });
+            }
+        } catch (IOException e) {
+
+            log.error("Error al agregar fotos al formData: " + e.getMessage(), e);
+
+            respuestaRegistroSuculenta = ResponseDataDto.builder()
+                    .message(e.toString())
+                    .errors(Collections.singletonList(e.getMessage()))
+                    .build();
+
+            return ResponseEntity.internalServerError().body(respuestaRegistroSuculenta);
+        }
 
         // form-data
         HttpHeaders headers = new HttpHeaders();
@@ -88,14 +110,14 @@ public class RouterRestController {
 
         HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 
-        try{
+        try {
 
             ResponseEntity<ResponseDataDto> responseEntity = restTemplate.postForEntity(urlApi + "/registrar-suculenta", requestEntity, ResponseDataDto.class);
             respuestaRegistroSuculenta = responseEntity.getBody();
 
             log.info("respuesta: {}", respuestaRegistroSuculenta);
 
-        } catch (HttpClientErrorException e){
+        } catch (HttpClientErrorException e) {
 
             log.error("Error al registrar suculenta", e);
 
@@ -104,7 +126,7 @@ public class RouterRestController {
 
             return ResponseEntity.badRequest().body(responseDataDto);
 
-        } catch (HttpServerErrorException e){
+        } catch (HttpServerErrorException e) {
 
             log.error("Error al registrar suculenta", e);
 
